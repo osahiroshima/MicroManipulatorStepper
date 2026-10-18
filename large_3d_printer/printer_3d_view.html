@@ -1,0 +1,400 @@
+<title>大型CoreXYプリンター 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 作業台のような一枚のステージ（3D）と、その下に操作盤・読み取り値・部品の凡例 */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --stage: #dfe4ea;
+  --fg: #1b232c;
+  --muted: #5a6673;
+  --line: #c6cdd5;
+  --accent: #d98a00;      /* ST-42BYH1004 モーターの色 */
+  --belt-a: #2f6fd6;
+  --belt-b: #c2412d;
+  --grid: #b7c0ca;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12171c; --surface: #1a2128; --stage: #161c22; --fg: #e3e8ee; --muted: #93a0ad;
+    --line: #2b343e; --accent: #f0a21a; --belt-a: #5b93f0; --belt-b: #ec6a52; --grid: #2a333d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12171c; --surface: #1a2128; --stage: #161c22; --fg: #e3e8ee; --muted: #93a0ad;
+  --line: #2b343e; --accent: #f0a21a; --belt-a: #5b93f0; --belt-b: #ec6a52; --grid: #2a333d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+h1 { font-size: clamp(1.3rem, 2.6vw, 1.75rem); margin: 0; font-weight: 700; text-wrap: balance; letter-spacing: 0.01em; }
+.spec { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.spec b { color: var(--fg); font-weight: 500; }
+
+.stage { position: relative; background: var(--stage); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+  height: min(68vh, 640px); min-height: 360px; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hint { position: absolute; left: 12px; bottom: 10px; font-size: 0.75rem; color: var(--muted); pointer-events: none; }
+.label { position: absolute; transform: translate(-50%, -100%); font-size: 0.72rem; line-height: 1.2; white-space: nowrap;
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line); padding: 2px 6px; border-radius: 3px;
+  pointer-events: none; }
+.label.motor { border-color: var(--accent); }
+.label::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 8px; background: var(--muted); }
+.labels-off .label { display: none; }
+
+.panel { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .panel { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+.card h2 { margin: 0; font-size: 0.78rem; font-weight: 500; color: var(--muted); letter-spacing: 0.08em; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select { font: inherit; font-size: 0.88rem; color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.slider { display: grid; grid-template-columns: auto minmax(0, 1fr) 4.5em; gap: 10px; align-items: center; font-size: 0.88rem; }
+.slider input { width: 100%; accent-color: var(--accent); }
+.slider output, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.readout div { display: grid; gap: 2px; }
+.readout span { font-size: 0.72rem; color: var(--muted); }
+.readout .num { font-size: 1.05rem; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: baseline; }
+.note { font-size: 0.84rem; color: var(--muted); margin: 0; }
+.note strong { color: var(--fg); font-weight: 500; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 0.75rem; }
+td.num { white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>大型CoreXY 3Dプリンター（計画モデル）</h1>
+    <div class="spec">
+      <span>造形 <b>350×350×350 mm</b></span>
+      <span>モーター <b>ST-42BYH1004 ×5</b></span>
+      <span>24V / TMC2209 / Klipper</span>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="hint">ドラッグで回転・ホイール／ピンチで拡大</div>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h2>操作</h2>
+      <div class="row" role="group" aria-label="ヘッドの動き">
+        <button id="play" aria-pressed="true">動かす</button>
+        <select id="mode" aria-label="動きの種類">
+          <option value="eight">8の字（X と Y 同時）</option>
+          <option value="x">X 方向だけ</option>
+          <option value="y">Y 方向だけ</option>
+        </select>
+        <button id="labels" aria-pressed="true">ラベル</button>
+        <button id="reset">視点を戻す</button>
+      </div>
+      <label class="slider" for="z">
+        <span>Z 高さ</span>
+        <input type="range" id="z" min="0" max="350" step="1" value="60">
+        <output id="zout" class="num">60 mm</output>
+      </label>
+      <p class="note">ベッドが 3 本のリードスクリュー（<strong>オレンジのモーター 3 台</strong>）で上下します。Z を上げるとベッドが下がり、ノズルとの距離が開きます。</p>
+    </div>
+
+    <div class="card">
+      <h2>CoreXY の読み取り値</h2>
+      <div class="readout">
+        <div><span>ヘッド X</span><b class="num" id="rx">–</b></div>
+        <div><span>ヘッド Y</span><b class="num" id="ry">–</b></div>
+        <div><span><i class="sw" style="background:var(--belt-a)"></i>モーター A 送り</span><b class="num" id="ra">–</b></div>
+        <div><span><i class="sw" style="background:var(--belt-b)"></i>モーター B 送り</span><b class="num" id="rb">–</b></div>
+      </div>
+      <p class="note" id="explain"></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>モーターの配置</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>位置</th><th>役割</th><th>駆動</th><th>移動量 / 1回転</th></tr></thead>
+        <tbody>
+          <tr><td>後ろ左（上段）</td><td>CoreXY モーター A</td><td>GT2 ベルト 9mm・20歯プーリー</td><td class="num">40 mm</td></tr>
+          <tr><td>後ろ右（上段）</td><td>CoreXY モーター B</td><td>GT2 ベルト 9mm・20歯プーリー</td><td class="num">40 mm</td></tr>
+          <tr><td>左前（下段）</td><td>Z（stepper_z）</td><td>T8 台形ネジ リード 2mm ＋ カップリング</td><td class="num">2 mm</td></tr>
+          <tr><td>後ろ中央（下段）</td><td>Z1（stepper_z1）</td><td>同上</td><td class="num">2 mm</td></tr>
+          <tr><td>右前（下段）</td><td>Z2（stepper_z2）</td><td>同上</td><td class="num">2 mm</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">寸法はおおよその計画値です（フレーム外形 約 500×500×640 mm）。エクストルーダー用の小型モーターはヘッドに載ります。</p>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  const stage = document.getElementById('stage');
+  if (!window.THREE) { stage.insertAdjacentHTML('beforeend', '<p class="note" style="padding:16px">3D ライブラリを読み込めませんでした。ページを再読み込みしてください。</p>'); return; }
+
+  // 単位は mm。three.js の座標: x=プリンター X、y=高さ、z=手前(+)〜奥(-)
+  const css = () => getComputedStyle(document.documentElement);
+  const tok = (n) => css().getPropertyValue(n).trim();
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 10, 10000);
+  const HOME_POS = new THREE.Vector3(1050, 820, 1150), HOME_TARGET = new THREE.Vector3(0, 300, 0);
+  camera.position.copy(HOME_POS);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.copy(HOME_TARGET);
+  controls.enableDamping = true;
+  controls.minDistance = 400; controls.maxDistance = 3500;
+  controls.update();
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8090a0, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(600, 1200, 800); scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.25); fill.position.set(-800, 400, -600); scene.add(fill);
+
+  const mat = (color, extra) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.55, metalness: 0.15 }, extra || {}));
+  const M = {
+    alu: mat(0xa9b2bb, { metalness: 0.45, roughness: 0.4 }),
+    rail: mat(0x7d8790, { metalness: 0.6, roughness: 0.3 }),
+    motor: mat(0x2b2f33, { roughness: 0.5 }),
+    motorCap: mat(0xd98a00),
+    bed: mat(0x9aa3ab, { metalness: 0.5, roughness: 0.35 }),
+    sheet: mat(0x353a40, { roughness: 0.8 }),
+    heater: mat(0xb8452f, { roughness: 0.9 }),
+    print: mat(0x2fa37a),
+    head: mat(0x3a4f66),
+    screw: mat(0xc8ccd0, { metalness: 0.7, roughness: 0.3 }),
+    brass: mat(0xb8913a, { metalness: 0.6, roughness: 0.35 }),
+    box: mat(0x4a525b),
+    beltA: mat(0x2f6fd6), beltB: mat(0xc2412d),
+  };
+
+  const box = (w, h, d, m, x, y, z, parent) => {
+    const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); (parent || scene).add(o); return o;
+  };
+  const cyl = (r, h, m, x, y, z, parent, seg) => {
+    const o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg || 24), m); o.position.set(x, y, z); (parent || scene).add(o); return o;
+  };
+
+  // ---- フレーム（2020 アルミ押し出し材） ----
+  const F = 240, E = 20, TOP = 640;
+  [[-F, -F], [F, -F], [-F, F], [F, F]].forEach(([x, z]) => box(E, TOP, E, M.alu, x, TOP / 2, z));
+  [10, 550, TOP - 10].forEach((y) => {
+    box(2 * F + E, E, E, M.alu, 0, y, -F); box(2 * F + E, E, E, M.alu, 0, y, F);
+    box(E, E, 2 * F - E, M.alu, -F, y, 0); box(E, E, 2 * F - E, M.alu, F, y, 0);
+  });
+
+  // ---- ガントリー（XY） ----
+  const GY = 560;               // ベルト・レールの高さ
+  const XL = -228, XR = 228;    // Y キャリッジ（左右）の x
+  const ZR = -226;              // 後ろのプーリー位置
+  const LV_A = GY + 14, LV_B = GY + 30; // ベルトの段（A 下段 / B 上段）
+  box(14, 10, 470, M.rail, XL, GY - 0, 0); box(14, 10, 470, M.rail, XR, GY - 0, 0); // MGN12 Y レール
+
+  const gantry = new THREE.Group(); scene.add(gantry);
+  box(XR - XL + 30, E, E, M.alu, 0, GY - 2, 0, gantry);        // X ビーム
+  box(XR - XL - 10, 8, 12, M.rail, 0, GY - 2, 14, gantry);     // MGN12 X レール
+  box(46, 30, 60, M.box, XL, GY + 14, 0, gantry);              // Y キャリッジ左
+  box(46, 30, 60, M.box, XR, GY + 14, 0, gantry);              // Y キャリッジ右
+  [LV_A, LV_B].forEach((lv) => { cyl(9, 10, M.screw, XL, lv, 0, gantry); cyl(9, 10, M.screw, XR, lv, 0, gantry); });
+
+  const head = new THREE.Group(); gantry.add(head);
+  box(62, 80, 52, M.head, 0, GY - 30, 40, head);
+  box(42, 24, 40, M.motor, 0, GY + 22, 40, head);              // エクストルーダー（パンケーキ型）
+  cyl(7, 22, M.brass, 0, GY - 80, 40, head);                   // ホットエンド
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(6, 12, 20), M.brass); tip.rotation.x = Math.PI; tip.position.set(0, GY - 97, 40); head.add(tip);
+  const NOZZLE_Y = GY - 103;
+
+  // ---- モーター（ST-42BYH1004: 42.3 角 × 48） ----
+  const motors = {};
+  function motor(name, x, yBase, z, shaftUp) {
+    const g = new THREE.Group(); g.position.set(x, yBase, z); scene.add(g);
+    const body = box(42.3, 48, 42.3, M.motor, 0, shaftUp ? 24 : -24, 0, g);
+    box(42.6, 6, 42.6, M.motorCap, 0, shaftUp ? 3 : -3, 0, g);      // 取付面側の目印
+    const spin = new THREE.Group(); g.add(spin);                      // 回転が見える指標
+    const capY = shaftUp ? -1 : 49;
+    box(30, 2, 5, M.motorCap, 8, shaftUp ? capY : -capY, 0, spin);
+    motors[name] = { group: g, spin, body };
+    return g;
+  }
+  // CoreXY: 後ろの角、天面に取り付けて軸を下（ベルト面）へ
+  motor('A', XL, LV_B + 22, ZR, false);
+  motor('B', XR, LV_B + 22, ZR, false);
+  [[XL, ZR], [XR, ZR]].forEach(([x, z]) => { cyl(7, 8, M.screw, x, LV_A, z); cyl(7, 8, M.screw, x, LV_B, z); });
+
+  // Z: 左前・後中央・右前。下段に置き、軸を上へ
+  const ZPTS = { Z: [-200, 212], Z1: [0, -212], Z2: [200, 212] };
+  Object.entries(ZPTS).forEach(([n, [x, z]]) => {
+    motor(n, x, 20, z, true);
+    cyl(4, 470, M.screw, x, 20 + 48 + 18 + 235, z, null, 12);   // T8 台形ネジ
+    cyl(8, 18, M.rail, x, 20 + 48 + 9, z);                      // カップリング
+    box(12, 470, 12, M.rail, x + (x === 0 ? 30 : (x < 0 ? 30 : -30)), 20 + 48 + 10 + 235, z, null); // Z ガイド
+  });
+
+  // ---- ベッド ----
+  const bed = new THREE.Group(); scene.add(bed);
+  box(360, 8, 360, M.bed, 0, -4, 0, bed);
+  box(350, 1.5, 350, M.sheet, 0, 0.75, 0, bed);
+  box(330, 2, 330, M.heater, 0, -9, 0, bed);
+  box(30, 14, 70, M.alu, -200, -14, 176, bed); box(30, 14, 70, M.alu, 200, -14, 176, bed); box(30, 14, 70, M.alu, 0, -14, -176, bed);
+  Object.values(ZPTS).forEach(([x, z]) => cyl(11, 16, M.brass, x, -14, z, bed));
+  const printed = new THREE.Group(); bed.add(printed);         // 造形物（高さに応じて伸びる）
+  const part = box(60, 1, 60, M.print, 0, 0.5, 0, printed);
+
+  // ---- 電装 ----
+  box(170, 50, 110, M.box, -110, 46, -120); box(150, 40, 100, M.box, 110, 41, -120);
+
+  // ---- 床グリッド ----
+  let grid;
+  function makeGrid() {
+    if (grid) scene.remove(grid);
+    grid = new THREE.GridHelper(1400, 28, new THREE.Color(tok('--grid')), new THREE.Color(tok('--grid')));
+    grid.position.y = 0; scene.add(grid);
+  }
+  makeGrid();
+
+  // ---- ベルト（軸に沿った細い板で表す） ----
+  const belts = { A: [], B: [] };
+  const segMesh = (m) => { const o = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), m); scene.add(o); return o; };
+  for (let i = 0; i < 5; i++) { belts.A.push(segMesh(M.beltA)); belts.B.push(segMesh(M.beltB)); }
+  function setSeg(o, p, q, y) {
+    const dx = q[0] - p[0], dz = q[1] - p[1];
+    o.position.set((p[0] + q[0]) / 2, y, (p[1] + q[1]) / 2);
+    o.scale.set(Math.abs(dx) + 1.5, 9, Math.abs(dz) + 1.5);
+  }
+
+  // ---- ラベル ----
+  const labelDefs = [
+    { t: 'モーター A（X/Y）', motor: true, p: () => motors.A.group.position.clone().add(new THREE.Vector3(0, 60, 0)) },
+    { t: 'モーター B（X/Y）', motor: true, p: () => motors.B.group.position.clone().add(new THREE.Vector3(0, 60, 0)) },
+    { t: 'Z（左前）', motor: true, p: () => motors.Z.group.position.clone().add(new THREE.Vector3(0, 70, 0)) },
+    { t: 'Z1（後中央）', motor: true, p: () => motors.Z1.group.position.clone().add(new THREE.Vector3(0, 70, 0)) },
+    { t: 'Z2（右前）', motor: true, p: () => motors.Z2.group.position.clone().add(new THREE.Vector3(0, 70, 0)) },
+    { t: 'ヘッド（ホットエンド＋押出機）', p: () => head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, GY + 50, 40)) },
+    { t: 'ベッド 350×350', p: () => bed.position.clone().add(new THREE.Vector3(150, 12, 150)) },
+    { t: 'T8 リードスクリュー', p: () => new THREE.Vector3(-200, 380, 212) },
+    { t: '24V電源 / 制御ボード', p: () => new THREE.Vector3(0, 85, -120) },
+  ];
+  labelDefs.forEach((d) => {
+    d.el = document.createElement('div'); d.el.className = 'label' + (d.motor ? ' motor' : ''); d.el.textContent = d.t; stage.appendChild(d.el);
+  });
+  const v = new THREE.Vector3();
+  function placeLabels(w, h) {
+    labelDefs.forEach((d) => {
+      v.copy(d.p()).project(camera);
+      const vis = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      d.el.hidden = !vis;
+      if (vis) { d.el.style.left = ((v.x + 1) / 2 * w) + 'px'; d.el.style.top = ((1 - v.y) / 2 * h - 8) + 'px'; }
+    });
+  }
+
+  // ---- 状態と UI ----
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ui = {
+    play: document.getElementById('play'), mode: document.getElementById('mode'), labels: document.getElementById('labels'),
+    reset: document.getElementById('reset'), z: document.getElementById('z'), zout: document.getElementById('zout'),
+    rx: document.getElementById('rx'), ry: document.getElementById('ry'), ra: document.getElementById('ra'), rb: document.getElementById('rb'),
+    explain: document.getElementById('explain'),
+  };
+  let playing = !reduce, t = 0, last = performance.now();
+  ui.play.setAttribute('aria-pressed', String(playing)); ui.play.textContent = playing ? '止める' : '動かす';
+  ui.play.addEventListener('click', () => { playing = !playing; ui.play.setAttribute('aria-pressed', String(playing)); ui.play.textContent = playing ? '止める' : '動かす'; });
+  ui.labels.addEventListener('click', () => { const on = !stage.classList.toggle('labels-off'); ui.labels.setAttribute('aria-pressed', String(on)); });
+  ui.reset.addEventListener('click', () => { camera.position.copy(HOME_POS); controls.target.copy(HOME_TARGET); controls.update(); });
+  const EXPLAIN = {
+    eight: 'X と Y を同時に動かすと、A と B の送り量はそれぞれ違う値になります。2 台を組み合わせてヘッドの位置が決まるのが CoreXY です。',
+    x: '<strong>X だけ</strong>動かすとき、A と B は<strong>逆向きに同じ量</strong>ベルトを送ります（この図の符号の取り方で）。',
+    y: '<strong>Y だけ</strong>動かすとき、A と B は<strong>同じ向きに同じ量</strong>ベルトを送ります。',
+  };
+  const setExplain = () => { ui.explain.innerHTML = EXPLAIN[ui.mode.value]; };
+  ui.mode.addEventListener('change', () => { t = 0; setExplain(); });
+  setExplain();
+  const setZ = () => { ui.zout.textContent = ui.z.value + ' mm'; };
+  ui.z.addEventListener('input', setZ); setZ();
+
+  // 基準位置（中央）からのベルト送り量
+  const R_PULLEY = 40 / (2 * Math.PI);
+  function headPath(mode, tt) {
+    if (mode === 'x') return [175 + 150 * Math.sin(tt), 175];
+    if (mode === 'y') return [175, 175 + 150 * Math.sin(tt)];
+    return [175 + 140 * Math.sin(tt), 175 + 120 * Math.sin(2 * tt)];
+  }
+
+  function update(dt) {
+    if (playing) t += dt * 0.9;
+    const [px, py] = headPath(ui.mode.value, t);
+    const pz = +ui.z.value;
+    const tx = px - 175, zc = (175 - py) - 40;  // ノズルは X ビームより 40mm 手前
+    gantry.position.z = zc; head.position.x = tx;
+
+    // ベルト経路（A: 下段 / B: 上段）
+    const H = [tx, zc], L = [XL, zc], R = [XR, zc], RL = [XL, ZR], RR = [XR, ZR];
+    [[H, L], [L, RL], [RL, RR], [RR, R], [R, H]].forEach(([p, q], i) => setSeg(belts.A[i], p, q, LV_A));
+    [[H, R], [R, RR], [RR, RL], [RL, L], [L, H]].forEach(([p, q], i) => setSeg(belts.B[i], p, q, LV_B));
+
+    // 中央からのベルト送り量: A = ΔX − ΔY、B = −ΔX − ΔY（この図の符号）
+    const dX = px - 175, dY = py - 175;
+    const a = dX - dY, b = -dX - dY;
+    motors.A.spin.rotation.y = -a / R_PULLEY;
+    motors.B.spin.rotation.y = -b / R_PULLEY;
+
+    // Z: ノズル先端から pz だけ下にベッド上面
+    bed.position.y = NOZZLE_Y - Math.max(pz, 0.5);
+    const turns = pz / 2;  // リード 2mm
+    ['Z', 'Z1', 'Z2'].forEach((n) => { motors[n].spin.rotation.y = turns * Math.PI * 2; });
+    const hgt = Math.max(1, pz - 2);
+    part.scale.y = hgt; part.position.y = hgt / 2;
+    part.position.x = 0; part.position.z = 0;
+
+    ui.rx.textContent = px.toFixed(1) + ' mm';
+    ui.ry.textContent = py.toFixed(1) + ' mm';
+    ui.ra.textContent = (a >= 0 ? '+' : '') + a.toFixed(1) + ' mm';
+    ui.rb.textContent = (b >= 0 ? '+' : '') + b.toFixed(1) + ' mm';
+  }
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const retheme = () => makeGrid();
+  if (mq.addEventListener) mq.addEventListener('change', retheme);
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt); controls.update(); renderer.render(scene, camera);
+    placeLabels(stage.clientWidth, stage.clientHeight);
+    requestAnimationFrame(loop);
+  }
+  update(0);
+  requestAnimationFrame(loop);
+})();
+</script>

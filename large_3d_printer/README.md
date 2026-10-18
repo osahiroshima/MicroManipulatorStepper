@@ -196,4 +196,5 @@
 | [README.md](README.md) | この計画書 |
 | [bom.md](bom.md) | 部品表（たたき台） |
 | [klipper/printer.cfg](klipper/printer.cfg) | Klipper 設定のモーター関連部分（ひな形） |
+| [printer_3d_view.html](printer_3d_view.html) | 3D イメージ（ブラウザで開くと回転・CoreXY の動きを確認できる。three.js を CDN から読み込むのでネット接続が必要） |
 | [tools/motor_speed_estimate.py](tools/motor_speed_estimate.py) | モーター速度の概算スクリプト（`python3 tools/motor_speed_estimate.py`） |
