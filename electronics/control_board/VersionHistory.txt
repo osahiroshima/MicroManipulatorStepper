@@ -1,15 +1,17 @@
+制御基板の変更履歴（日本語訳。英語の原文は VersionHistory.en.txt）
+
 *** v1.3 ****************************
 
- - Fixed critical problem with PCB layout, where 5V rail was shorted to GND on one of the diode pins of D1.
- 
+ - 基板レイアウトの重大な問題を修正：ダイオード D1 のピンの 1 つで、5V 電源ラインが GND とショートしていた。
+
 *** v1.2 ****************************
 
-- added diode on 5V mcu supply to prevent motors from being powered backwards through the stepdown converter.
+- マイコン用 5V 電源にダイオードを追加：降圧コンバーターを通ってモーター側に逆向きに電源が流れ込むのを防ぐ。
 
 *** v1.1 ****************************
 
-- Silkscreen on encoder connector was wrong: labels for CS1 and CS3 where swapped
+- エンコーダー用コネクターのシルク印刷の誤りを修正：CS1 と CS3 の表記が入れ替わっていた。
 
 *** v1.0 ****************************
 
-Initial version
+最初のバージョン
